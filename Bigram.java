@@ -1,6 +1,3 @@
-import edu.stanford.nlp.ling.Word;
-import edu.stanford.nlp.process.PTBTokenizer;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
@@ -13,22 +10,20 @@ import java.util.Random;
  */
 public class Bigram implements NGram {
 
-    HashMap<Word, Unigram> map = new HashMap<Word, Unigram>();
+    HashMap<String, Unigram> map = new HashMap<String, Unigram>();
     ArrayList<WordDouble> popularTokens = new ArrayList<WordDouble>();
     int count = 0;
 
     public String generateSentence() {
         String sentence = "<s>";
-        String lastWord = "<s>";
-        String curWord = "";
+        String second = sentence;
+        String first = "";
         Random random = new Random();
-        while (!curWord.equals("</s>")) {
-            Word last = new Word(lastWord);
-            Unigram lastGram = map.get(last);
+        while (!first.equals("</s>")) {
+            Unigram lastGram = map.get(first);
             int x = random.nextInt(lastGram.tokens.size() - 1);
-            Word cur = lastGram.tokens.get(x);
-            curWord = cur.word();
-            sentence += " " + curWord;
+            second = lastGram.tokens.get(x);
+            sentence += " " + first;
         }
         return sentence;
     }
@@ -39,48 +34,68 @@ public class Bigram implements NGram {
      *
      * @param tokens tokenizer containing words
      */
-    public void makeMap(PTBTokenizer<Word> tokens) {
-        Word lastWord;
-        Word curWord = null;
-        while (tokens.hasNext()) {
-            lastWord = curWord;
-            curWord = tokens.next();
-            if (lastWord != null && curWord.word().equals(lastWord.word())) {
-                System.out.println(curWord);
+    public void makeMap(ArrayList<String> tokens) {
+        String second = "<s>";
+        String first;
+        for (String s : tokens) {
+            first = second;
+            second = s;
+            second = second.toLowerCase();
+            count++;
+            if (first.equals("</s>")) {
+                first = "<s>";
             }
-            curWord.setWord(curWord.word().toLowerCase());
-            if (lastWord != null && lastWord.word().equals("</s>")) {
-                continue;
-            }
-            if (map.containsKey(lastWord)) {
-                count++;
-                Unigram unigram = map.get(lastWord);
-                unigram.put(curWord);
-                checkForPopular(curWord, lastWord);
+            if (map.containsKey(second)) {
+                Unigram unigram = map.get(second);
+                unigram.put(first);
+                checkForPopular(first, second);
             } else {
-                count++;
                 Unigram unigram = new Unigram();
-                map.put(lastWord, unigram);
-                unigram.put(curWord);
+                map.put(second, unigram);
+                unigram.put(first);
                 if (popularTokens.size() < 10) {
-                    popularTokens.add(new WordDouble(curWord, lastWord));
+                    popularTokens.add(new WordDouble(first, second));
                 }
             }
-
         }
     }
 
-    private void checkForPopular(Word curWord, Word lastWord) {
+    public void put(String second, String first) {
+        count++;
+        if (second != null && second.equals("</s>")) {
+            second = "<s>";
+        }
+        if (map.containsKey(second)) {
+            Unigram unigram = map.get(second);
+            unigram.put(first);
+            checkForPopular(first, second);
+        } else {
+            Unigram unigram = new Unigram();
+            map.put(second, unigram);
+            unigram.put(first);
+            if (popularTokens.size() < 10) {
+                popularTokens.add(new WordDouble(first, second));
+            }
+        }
+    }
 
+    public float getProbability(String first, String second) {
+        return ((float) map.get(second).map.get(first)) / ((float) map.get(second).count);
+    }
+
+    private void checkForPopular(String first, String second) {
         //if the popularTokens doesn't contain this bigram
-        if (!contains(curWord, lastWord)) {
-            popularTokens.add(new WordDouble(curWord, lastWord));
-            for (int i = popularTokens.size() - 1; i > 0 &&
-                    map.get(popularTokens.get(i - 1).lastWord).map.get(popularTokens.get(i - 1).curWord)
-                            <= map.get(popularTokens.get(i).lastWord).map.get(popularTokens.get(i).curWord); i--) {
+        if (!contains(first, second)) {
+            popularTokens.add(new WordDouble(first, second));
+            int i = popularTokens.size() - 1;
+            int x = popularTokens.get(i).getCount();
+            int y = popularTokens.get(i - 1).getCount();
+            while (i > 1 && x > y) {
                 WordDouble temp = popularTokens.get(i);
                 popularTokens.set(i, popularTokens.get(i - 1));
                 popularTokens.set(i - 1, temp);
+                i--;
+                y = popularTokens.get(i - 1).getCount();
             }
             popularTokens.remove(popularTokens.size() - 1);
         }
@@ -91,8 +106,8 @@ public class Bigram implements NGram {
                 int i = 0;
                 WordDouble topWord = null;
                 for (WordDouble word : popularTokens) {
-                    if (map.get(lastWord).map.get(curWord) > i) {
-                        i = map.get(lastWord).map.get(curWord);
+                    if (word.getCount() > i) {
+                        i = word.getCount();
                         topWord = word;
                     }
                 }
@@ -103,29 +118,36 @@ public class Bigram implements NGram {
         }
     }
 
-    private boolean contains(Word cur, Word last) {
+    private boolean contains(String first, String second) {
         for (WordDouble w : popularTokens) {
-            if (w.curWord.equals(cur) && w.lastWord.equals(last)) {
+            if (w.first.equals(first) && w.second.equals(second)) {
                 return true;
             }
         }
         return false;
     }
 
-    public static class WordDouble {
-        Word curWord;
-        Word lastWord;
 
-        public WordDouble(Word cur, Word last) {
-            curWord = cur;
-            lastWord = last;
+    /**
+     * Wrapper class for a bigram that can also be written as (second | first)
+     */
+    public class WordDouble {
+        String first;
+        String second;
+
+        public WordDouble(String fir, String sec) {
+            first = fir;
+            second = sec;
+        }
+
+        public int getCount() {
+            return map.get(second).map.get(first);
         }
 
         @Override
         public String toString() {
-            return "(" + curWord + "|" + lastWord + ")";
+            return "(" + second + "|" + first + ")";
         }
     }
-
 
 }

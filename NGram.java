@@ -1,12 +1,11 @@
-import edu.stanford.nlp.ling.Word;
-import edu.stanford.nlp.process.PTBTokenizer;
+import java.util.ArrayList;
 
 /**
  * Created by Ian on 2/20/2015.
  */
 public interface NGram {
 
-    public void makeMap(PTBTokenizer<Word> tokens);
+    public void makeMap(ArrayList<String> tokens);
 
     public String generateSentence();
 
