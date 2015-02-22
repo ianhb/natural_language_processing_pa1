@@ -9,6 +9,14 @@ public class Trigram implements NGram {
     ArrayList<WordTriple> popularTokens = new ArrayList<WordTriple>();
     int count = 0;
 
+
+    /**
+     * Takes in a tokenizer and matches all of the trigrams to a map of string to bigram
+     * if a trigram is (third | first second), it is mapped to first -> (second -> (third -> int)) where (third -> int) is a unigram
+     * and (second -> (third -> int)) is a bigram
+     *
+     * @param tokens List of words to make map from
+     */
     @Override
     public void makeMap(ArrayList<String> tokens) {
         String first;
@@ -20,9 +28,8 @@ public class Trigram implements NGram {
             third = s;
             third = third.toLowerCase();
             count++;
-            if (second.equals("</s>")) {
-                second = "<s>";
-                first = "<s>";
+            if (second.equals("</s>") || first.equals("</s>")) {
+                continue;
             }
             if (map.containsKey(first)) {
                 Bigram bigram = map.get(first);
@@ -39,13 +46,18 @@ public class Trigram implements NGram {
         }
     }
 
-
+    /**
+     * Returns a randomly generated string starting with "<s>" and ending with "</s>"
+     * Uses the probability from the trigram map to find a sentence.
+     *
+     * @return a randomly generated string that models a sentence
+     */
     @Override
     public String generateSentence() {
+        String sentence = "<s>";
         String first = "<s>";
         String second = first;
-        String third = first;
-        String sentence = first + " " + second + " " + third;
+        String third = "";
         Random random = new Random();
         while (!third.equals("</s>")) {
             Bigram firstGram = map.get(first);
@@ -54,27 +66,27 @@ public class Trigram implements NGram {
             second = third;
             int x = random.nextInt(secondGram.tokens.size() - 1);
             third = secondGram.tokens.get(x);
+            while (map.get(first).map.get(second).tokens == null) {
+                x = random.nextInt(secondGram.tokens.size() - 1);
+                third = secondGram.tokens.get(x);
+            }
             sentence += " " + third;
+            System.out.println(sentence);
         }
         return sentence;
     }
 
     @Override
     public String toString() {
-        Iterator<Map.Entry<String, Bigram>> iterator = map.entrySet().iterator();
         String ret = "";
-        while (iterator.hasNext()) {
-            Map.Entry<String, Bigram> entry = iterator.next();
+        for (Map.Entry<String, Bigram> entry : map.entrySet()) {
             String third = entry.getKey();
-            Iterator<Map.Entry<String, Unigram>> bigIt = entry.getValue().map.entrySet().iterator();
-            while (bigIt.hasNext()) {
-                Map.Entry<String, Unigram> ent = bigIt.next();
+            for (Map.Entry<String, Unigram> ent : entry.getValue().map.entrySet()) {
                 String second = ent.getKey();
                 Iterator<Map.Entry<String, Integer>> uniIt = ent.getValue().map.entrySet().iterator();
-                while (uniIt.hasNext()) {
-                    Map.Entry<String, Integer> entry1 = uniIt.next();
+                for (Map.Entry<String, Integer> entry1 : ent.getValue().map.entrySet()) {
                     String first = entry1.getKey();
-                    ret += third + ":" + second + ":" + first + ":" + entry1.getValue() + " ";
+                    ret += third + ":" + second + ":" + first + ":" + entry1.getValue() + "\n";
                 }
             }
         }

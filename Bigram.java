@@ -1,5 +1,6 @@
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 
 /**
@@ -14,26 +15,39 @@ public class Bigram implements NGram {
     ArrayList<WordDouble> popularTokens = new ArrayList<WordDouble>();
     int count = 0;
 
+    /**
+     * Returns a randomly generated string starting with "<s>" and ending with "</s>"
+     * Uses the probability from the bigram map to find a sentence.
+     *
+     * @return a randomly generated string that models a sentence
+     */
+    @Override
     public String generateSentence() {
         String sentence = "<s>";
-        String second = sentence;
-        String first = "";
+        String first;
+        String second = "<s>";
         Random random = new Random();
-        while (!first.equals("</s>")) {
+        while (!second.equals("</s>")) {
+            first = second;
             Unigram lastGram = map.get(first);
             int x = random.nextInt(lastGram.tokens.size() - 1);
             second = lastGram.tokens.get(x);
-            sentence += " " + first;
+            while (map.get(first).tokens == null) {
+                x = random.nextInt(lastGram.tokens.size() - 1);
+                second = lastGram.tokens.get(x);
+            }
+            sentence += " " + second;
         }
         return sentence;
     }
 
     /**
-     * Takes in a tokenizer and matches all of the bigrams to a map of word to unigram
-     * if a bigram is (foo | bar), it is mapped to bar -> (foo -> int) where (foo -> int) is a unigram
+     * Takes in a tokenizer and matches all of the bigrams to a map of string to unigram
+     * if a bigram is (second | first), it is mapped to first -> (second -> int) where (second -> int) is a unigram
      *
-     * @param tokens tokenizer containing words
+     * @param tokens List of words to make map from
      */
+    @Override
     public void makeMap(ArrayList<String> tokens) {
         String second = "<s>";
         String first;
@@ -43,7 +57,7 @@ public class Bigram implements NGram {
             second = second.toLowerCase();
             count++;
             if (first.equals("</s>")) {
-                first = "<s>";
+                continue;
             }
             if (map.containsKey(second)) {
                 Unigram unigram = map.get(second);
@@ -58,6 +72,19 @@ public class Bigram implements NGram {
                 }
             }
         }
+    }
+
+    @Override
+    public String toString() {
+        String ret = "";
+        for (Map.Entry<String, Unigram> entry : map.entrySet()) {
+            String second = entry.getKey();
+            for (Map.Entry<String, Integer> ent : entry.getValue().map.entrySet()) {
+                String first = ent.getKey();
+                ret += second + ":" + first + ":" + ent.getValue() + "\n";
+            }
+        }
+        return ret;
     }
 
     public void put(String second, String first) {

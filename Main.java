@@ -40,13 +40,22 @@ public class Main {
 
         Trigram trigram = new Trigram();
         Bigram bigram = new Bigram();
+        Unigram unigram = new Unigram();
         bigram.makeMap(arrayifyTokens(tokenizeString(up_Train)));
-
+        unigram.makeMap(arrayifyTokens(tokenizeString(up_Train)));
         trigram.makeMap(arrayifyTokens(tokenizeString(up_Train)));
         for (Trigram.WordTriple triple : trigram.popularTokens) {
             System.out.println(triple.toString() + ":" + triple.getCount());
         }
-        System.out.println(trigram.generateSentence());
+        for (Bigram.WordDouble wordDouble : bigram.popularTokens) {
+            System.out.println(wordDouble.toString() + ":" + wordDouble.getCount());
+        }
+        for (String s : unigram.popularTokens) {
+            System.out.println(s + ":" + unigram.map.get(s));
+        }
+        System.out.println(bigram.map.get("<s>").toString());
+        System.out.println(bigram.generateSentence());
+        //System.out.println(trigram.generateSentence());
     }
 
     private static PTBTokenizer<Word> tokenizeString(String words) {
