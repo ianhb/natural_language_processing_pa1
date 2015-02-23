@@ -24,6 +24,12 @@ public class Bigram implements NGram {
      *
      * @return a randomly generated string that models a sentence
      */
+
+    public Bigram() {
+        types.add(Main.UNKNOWN);
+        map.put(Main.UNKNOWN, new Unigram());
+    }
+
     @Override
     public String generateSentence() {
         String sentence = "<s>";
@@ -84,7 +90,6 @@ public class Bigram implements NGram {
                 }
             }
         }
-        laplaceSmooth();
     }
 
     @Override
@@ -120,14 +125,80 @@ public class Bigram implements NGram {
         }
     }
 
-    public float getProbability(String first, String second) {
-        return ((float) map.get(second).map.get(first)) / ((float) map.get(second).count);
+    public void showResults(String first, String second) {
+        if (!types.contains(first)) {
+            first = Main.UNKNOWN;
+        }
+        if (!types.contains(second)) {
+            second = Main.UNKNOWN;
+        }
+
+
     }
 
-    private void laplaceSmooth() {
-        SmoothingThread thread = new SmoothingThread(this);
-        new Thread(thread).start();
+    public float unsmoothedProbability(String first, String second) {
+        if (!types.contains(first)) {
+            first = Main.UNKNOWN;
+        }
+        if (!types.contains(second)) {
+            second = Main.UNKNOWN;
+        }
+        float num;
+        if (!map.containsKey(first) || !map.get(first).map.containsKey(second)) {
+            return 0;
+        } else {
+            num = (float) map.get(first).map.get(second);
+        }
+        float denom = (float) map.get(first).count;
+        return num / denom;
     }
+
+    public float laplaceSmoothProbability(String first, String second) {
+        if (!types.contains(first)) {
+            first = Main.UNKNOWN;
+        }
+        if (!types.contains(second)) {
+            second = Main.UNKNOWN;
+        }
+        float num;
+        if (!map.containsKey(first) || !map.get(first).map.containsKey(second)) {
+            num = 1;
+        } else {
+            num = (float) map.get(first).map.get(second) + 1;
+        }
+        float denom;
+        if (!map.containsKey(first)) {
+            denom = types.size();
+        } else {
+            denom = (float) map.get(first).count + types.size();
+        }
+        return num / denom;
+    }
+
+    public double perplexity(ArrayList<String> testSet) {
+        double total = 0;
+        String first;
+        String second = null;
+        String third = null;
+        int N = 0;
+        for (String s : testSet) {
+            N++;
+            first = second;
+            second = third;
+            third = s;
+            if (first == null) {
+                N--;
+                continue;
+            }
+            if (first.equals("</s>") || second.equals("</s>")) {
+                continue;
+            }
+            double x = -Math.log(laplaceSmoothProbability(first, second));
+            total += x;
+        }
+        return total * (1.0 / N);
+    }
+
 
     private void checkForPopular(String first, String second) {
         //if the popularTokens doesn't contain this bigram
@@ -195,34 +266,4 @@ public class Bigram implements NGram {
             return "(" + second + "|" + first + ")";
         }
     }
-
-    private class SmoothingThread implements Runnable {
-
-        Bigram bigram;
-
-        public SmoothingThread(Bigram bigram) {
-            this.bigram = bigram;
-        }
-
-        @Override
-        public void run() {
-            System.out.println("Smoothing with " + bigram.types.size() + " types");
-            for (String unigramString : bigram.types) {
-                if (!bigram.map.containsKey(unigramString)) {
-                    bigram.map.put(unigramString, new Unigram());
-                }
-                for (String integerString : bigram.types) {
-                    bigram.count++;
-                    if (!bigram.map.get(unigramString).map.containsKey(integerString)) {
-                        bigram.map.get(unigramString).map.put(integerString, 1);
-                    } else {
-                        int x = bigram.map.get(unigramString).map.get(integerString);
-                        bigram.map.get(unigramString).map.put(integerString, x + 1);
-                    }
-                }
-            }
-            System.out.println("Bigram Smoothing Complete");
-        }
-    }
-
 }

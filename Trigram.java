@@ -17,6 +17,11 @@ public class Trigram implements NGram {
     int count = 0;
 
 
+    public Trigram() {
+        types.add(Main.UNKNOWN);
+        map.put(Main.UNKNOWN, new Bigram());
+    }
+
     /**
      * Takes in a tokenizer and matches all of the trigrams to a map of string to bigram
      * if a trigram is (third | first second), it is mapped to first -> (second -> (third -> int)) where (third -> int) is a unigram
@@ -26,6 +31,7 @@ public class Trigram implements NGram {
      */
     @Override
     public void makeMap(ArrayList<String> tokens) {
+
         String first;
         String second = "<s>";
         String third = "<s>";
@@ -54,7 +60,6 @@ public class Trigram implements NGram {
                 bigram.put(third, second);
             }
         }
-        laplaceSmooth();
     }
 
     /**
@@ -160,9 +165,87 @@ public class Trigram implements NGram {
         }
     }
 
-    private void laplaceSmooth() {
-        SmoothingThread thread = new SmoothingThread(this);
-        new Thread(thread).start();
+    public void showResults(String first, String second, String third) {
+        if (!types.contains(first)) {
+            first = Main.UNKNOWN;
+        }
+        if (!types.contains(second)) {
+            second = Main.UNKNOWN;
+        }
+        if (!types.contains(third)) {
+            second = Main.UNKNOWN;
+        }
+
+
+    }
+
+    public float unsmoothedProbability(String first, String second, String third) {
+        if (!types.contains(first)) {
+            first = Main.UNKNOWN;
+        }
+        if (!types.contains(second)) {
+            second = Main.UNKNOWN;
+        }
+        if (!types.contains(third)) {
+            second = Main.UNKNOWN;
+        }
+        float num;
+        if (!map.containsKey(first) || !map.get(first).map.containsKey(second) || !map.get(first).map.get(second).map.containsKey(third)) {
+            return 0;
+        } else {
+            num = (float) map.get(first).map.get(second).map.get(third);
+        }
+        float denom = (float) map.get(first).map.get(second).count;
+        return num / denom;
+    }
+
+    public float laplaceSmoothProbability(String first, String second, String third) {
+        if (!types.contains(first)) {
+            first = Main.UNKNOWN;
+        }
+        if (!types.contains(second)) {
+            second = Main.UNKNOWN;
+        }
+        if (!types.contains(third)) {
+            second = Main.UNKNOWN;
+        }
+        float num;
+        if (!map.containsKey(first) || !map.get(first).map.containsKey(second) || !map.get(first).map.get(second).map.containsKey(third)) {
+            num = 1;
+        } else {
+            num = (float) map.get(first).map.get(second).map.get(third) + 1;
+        }
+        float denom;
+        if (!map.containsKey(first) || !map.get(first).map.containsKey(second)) {
+            denom = types.size();
+        } else {
+            denom = (float) map.get(first).map.get(second).count + types.size();
+        }
+        return num / denom;
+    }
+
+    public double perplexity(ArrayList<String> testSet) {
+        double total = 0;
+        String first;
+        String second = null;
+        String third = null;
+        int N = 0;
+        for (String s : testSet) {
+            N++;
+            first = second;
+            second = third;
+            third = s;
+            if (first == null) {
+                N--;
+                continue;
+            }
+            if (first.equals("</s>") || second.equals("</s>")) {
+                continue;
+            }
+            double x = -Math.log(laplaceSmoothProbability(first, second, third));
+            total += x;
+        }
+        return total * (1.0 / N);
     }
 
     private boolean contains(String first, String second, String third) {
@@ -196,39 +279,6 @@ public class Trigram implements NGram {
         @Override
         public String toString() {
             return "(" + third + " | " + first + " " + second + ")";
-        }
-    }
-
-    private class SmoothingThread implements Runnable {
-
-        Trigram trigram;
-
-        public SmoothingThread(Trigram trigram) {
-            this.trigram = trigram;
-        }
-
-        @Override
-        public void run() {
-            System.out.println("Smoothing with " + trigram.types.size() + " types");
-            for (String bigramString : trigram.types) {
-                if (!trigram.map.containsKey(bigramString)) {
-                    trigram.map.put(bigramString, new Bigram());
-                }
-                for (String unigramString : trigram.types) {
-                    if (!trigram.map.get(bigramString).map.containsKey(unigramString)) {
-                        trigram.map.get(bigramString).map.put(unigramString, new Unigram());
-                    }
-                    for (String integerString : trigram.types) {
-                        if (!trigram.map.get(bigramString).map.get(unigramString).map.containsKey(integerString)) {
-                            trigram.map.get(bigramString).map.get(unigramString).map.put(integerString, 1);
-                        } else {
-                            int x = trigram.map.get(bigramString).map.get(unigramString).map.get(integerString);
-                            trigram.map.get(bigramString).map.get(unigramString).map.put(integerString, x + 1);
-                        }
-                    }
-                }
-            }
-            System.out.println("Trigram smoothing complete");
         }
     }
 }
