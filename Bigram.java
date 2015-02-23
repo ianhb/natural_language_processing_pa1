@@ -13,6 +13,9 @@ public class Bigram implements NGram {
 
     HashMap<String, Unigram> map = new HashMap<String, Unigram>();
     ArrayList<WordDouble> popularTokens = new ArrayList<WordDouble>();
+    ArrayList<WordDouble> tokens = new ArrayList<WordDouble>();
+    ArrayList<String> types = new ArrayList<String>();
+
     int count = 0;
 
     /**
@@ -30,7 +33,12 @@ public class Bigram implements NGram {
         while (!second.equals("</s>")) {
             first = second;
             Unigram lastGram = map.get(first);
-            int x = random.nextInt(lastGram.tokens.size() - 1);
+            int x;
+            if (lastGram.tokens.size() < 2) {
+                x = 0;
+            } else {
+                x = random.nextInt(lastGram.tokens.size() - 1);
+            }
             second = lastGram.tokens.get(x);
             while (map.get(first).tokens == null) {
                 x = random.nextInt(lastGram.tokens.size() - 1);
@@ -52,6 +60,9 @@ public class Bigram implements NGram {
         String second = "<s>";
         String first;
         for (String s : tokens) {
+            if (!types.contains(s)) {
+                types.add(s);
+            }
             first = second;
             second = s;
             second = second.toLowerCase();
@@ -59,19 +70,21 @@ public class Bigram implements NGram {
             if (first.equals("</s>")) {
                 continue;
             }
-            if (map.containsKey(second)) {
-                Unigram unigram = map.get(second);
-                unigram.put(first);
+            this.tokens.add(new WordDouble(first, second));
+            if (map.containsKey(first)) {
+                Unigram unigram = map.get(first);
+                unigram.put(second);
                 checkForPopular(first, second);
             } else {
                 Unigram unigram = new Unigram();
-                map.put(second, unigram);
-                unigram.put(first);
+                map.put(first, unigram);
+                unigram.put(second);
                 if (popularTokens.size() < 10) {
                     popularTokens.add(new WordDouble(first, second));
                 }
             }
         }
+        laplaceSmooth();
     }
 
     @Override
@@ -88,18 +101,19 @@ public class Bigram implements NGram {
     }
 
     public void put(String second, String first) {
-        count++;
-        if (second != null && second.equals("</s>")) {
-            second = "<s>";
+        if (!types.contains(first)) {
+            types.add(first);
         }
-        if (map.containsKey(second)) {
-            Unigram unigram = map.get(second);
-            unigram.put(first);
+        count++;
+        this.tokens.add(new WordDouble(first, second));
+        if (map.containsKey(first)) {
+            Unigram unigram = map.get(first);
+            unigram.put(second);
             checkForPopular(first, second);
         } else {
             Unigram unigram = new Unigram();
-            map.put(second, unigram);
-            unigram.put(first);
+            map.put(first, unigram);
+            unigram.put(second);
             if (popularTokens.size() < 10) {
                 popularTokens.add(new WordDouble(first, second));
             }
@@ -108,6 +122,11 @@ public class Bigram implements NGram {
 
     public float getProbability(String first, String second) {
         return ((float) map.get(second).map.get(first)) / ((float) map.get(second).count);
+    }
+
+    private void laplaceSmooth() {
+        SmoothingThread thread = new SmoothingThread(this);
+        new Thread(thread).start();
     }
 
     private void checkForPopular(String first, String second) {
@@ -168,12 +187,41 @@ public class Bigram implements NGram {
         }
 
         public int getCount() {
-            return map.get(second).map.get(first);
+            return map.get(first).map.get(second);
         }
 
         @Override
         public String toString() {
             return "(" + second + "|" + first + ")";
+        }
+    }
+
+    private class SmoothingThread implements Runnable {
+
+        Bigram bigram;
+
+        public SmoothingThread(Bigram bigram) {
+            this.bigram = bigram;
+        }
+
+        @Override
+        public void run() {
+            System.out.println("Smoothing with " + bigram.types.size() + " types");
+            for (String unigramString : bigram.types) {
+                if (!bigram.map.containsKey(unigramString)) {
+                    bigram.map.put(unigramString, new Unigram());
+                }
+                for (String integerString : bigram.types) {
+                    bigram.count++;
+                    if (!bigram.map.get(unigramString).map.containsKey(integerString)) {
+                        bigram.map.get(unigramString).map.put(integerString, 1);
+                    } else {
+                        int x = bigram.map.get(unigramString).map.get(integerString);
+                        bigram.map.get(unigramString).map.put(integerString, x + 1);
+                    }
+                }
+            }
+            System.out.println("Bigram Smoothing Complete");
         }
     }
 

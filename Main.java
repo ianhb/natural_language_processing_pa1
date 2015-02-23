@@ -1,13 +1,17 @@
-import edu.stanford.nlp.ling.Word;
-import edu.stanford.nlp.process.PTBTokenizer;
-import edu.stanford.nlp.process.WordTokenFactory;
+import edu.stanford.nlp.ling.CoreAnnotations;
+import edu.stanford.nlp.ling.CoreLabel;
+import edu.stanford.nlp.pipeline.Annotation;
+import edu.stanford.nlp.pipeline.StanfordCoreNLP;
+import edu.stanford.nlp.util.CoreMap;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
-import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.Properties;
 
 /**
+ * Main class for PA1
+ *
  * Created by Ian on 2/19/2015.
  */
 public class Main {
@@ -38,44 +42,63 @@ public class Main {
             e.printStackTrace();
         }
 
-        Trigram trigram = new Trigram();
-        Bigram bigram = new Bigram();
-        Unigram unigram = new Unigram();
-        bigram.makeMap(arrayifyTokens(tokenizeString(up_Train)));
-        unigram.makeMap(arrayifyTokens(tokenizeString(up_Train)));
-        trigram.makeMap(arrayifyTokens(tokenizeString(up_Train)));
-        for (Trigram.WordTriple triple : trigram.popularTokens) {
-            System.out.println(triple.toString() + ":" + triple.getCount());
+        ArrayList<String> upTrainTokens = preprocess(up_Train);
+        ArrayList<String> downTrainTokens = preprocess(down_Train);
+        Trigram upTrainTri = new Trigram();
+        Bigram upTrainBi = new Bigram();
+        Unigram upTrainUni = new Unigram();
+        upTrainBi.makeMap(upTrainTokens);
+        upTrainUni.makeMap(upTrainTokens);
+        upTrainTri.makeMap(upTrainTokens);
+        Trigram downTrainTri = new Trigram();
+        Bigram downTrainBi = new Bigram();
+        Unigram downTrainUni = new Unigram();
+        downTrainBi.makeMap(downTrainTokens);
+        downTrainUni.makeMap(downTrainTokens);
+        downTrainTri.makeMap(downTrainTokens);
+        for (String s : upTrainUni.popularTokens) {
+            System.out.println(s + ":" + upTrainUni.map.get(s));
         }
-        for (Bigram.WordDouble wordDouble : bigram.popularTokens) {
+        for (Bigram.WordDouble wordDouble : upTrainBi.popularTokens) {
             System.out.println(wordDouble.toString() + ":" + wordDouble.getCount());
         }
-        for (String s : unigram.popularTokens) {
-            System.out.println(s + ":" + unigram.map.get(s));
+        for (Trigram.WordTriple triple : upTrainTri.popularTokens) {
+            System.out.println(triple.toString() + ":" + triple.getCount());
         }
-        System.out.println(bigram.map.get("<s>").toString());
-        System.out.println(bigram.generateSentence());
-        //System.out.println(trigram.generateSentence());
+        for (String s : downTrainUni.popularTokens) {
+            System.out.println(s + ":" + upTrainUni.map.get(s));
+        }
+        for (Bigram.WordDouble wordDouble : downTrainBi.popularTokens) {
+            System.out.println(wordDouble.toString() + ":" + wordDouble.getCount());
+        }
+        for (Trigram.WordTriple triple : downTrainTri.popularTokens) {
+            System.out.println(triple.toString() + ":" + triple.getCount());
+        }
+        System.out.println("Unigram Sentence: " + upTrainUni.generateSentence());
+        System.out.println("Bigram Sentence: " + upTrainBi.generateSentence());
+        System.out.println("Trigram Sentence: " + upTrainTri.generateSentence());
     }
 
-    private static PTBTokenizer<Word> tokenizeString(String words) {
+    private static ArrayList<String> preprocess(String words) {
         words = words.replaceAll("\\. ", "</s> <s>");
         words = "<s> " + words;
         words = words.substring(0, words.lastIndexOf("<s>"));
-        return new PTBTokenizer<Word>(new StringReader(words), new WordTokenFactory(), "ptb3Escaping=false");
-    }
+        words = words.replaceAll("\\d", "");
+        words = words.replaceAll("[,!?@()\\-:;.$'\\\\*~]", "");
 
-    private static ArrayList<String> arrayifyTokens(PTBTokenizer<Word> tokens) {
-        String last;
-        String current = null;
-        ArrayList<String> words = new ArrayList<String>();
-        while (tokens.hasNext()) {
-            last = current;
-            current = tokens.next().word();
-            if (!current.equals(last)) {
-                words.add(current);
+        ArrayList<String> tokens = new ArrayList<String>();
+
+        Properties props = new Properties();
+        props.put("annotators", "tokenize, ssplit, pos, lemma");
+        StanfordCoreNLP pipeline = new StanfordCoreNLP(props, false);
+        Annotation document = pipeline.process(words);
+
+        for (CoreMap sentence : document.get(CoreAnnotations.SentencesAnnotation.class)) {
+            for (CoreLabel token : sentence.get(CoreAnnotations.TokensAnnotation.class)) {
+                String lemma = token.get(CoreAnnotations.LemmaAnnotation.class);
+                tokens.add(lemma);
             }
         }
-        return words;
+        return tokens;
     }
 }

@@ -1,12 +1,19 @@
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Random;
 
 /**
+ * Class to model a trigram of a language model
+ *
+ *
  * Created by Ian on 2/21/2015.
  */
 public class Trigram implements NGram {
 
     HashMap<String, Bigram> map = new HashMap<String, Bigram>();
     ArrayList<WordTriple> popularTokens = new ArrayList<WordTriple>();
+    ArrayList<String> types = new ArrayList<String>();
     int count = 0;
 
 
@@ -23,6 +30,9 @@ public class Trigram implements NGram {
         String second = "<s>";
         String third = "<s>";
         for (String s : tokens) {
+            if (!types.contains(s)) {
+                types.add(s);
+            }
             first = second;
             second = third;
             third = s;
@@ -33,7 +43,7 @@ public class Trigram implements NGram {
             }
             if (map.containsKey(first)) {
                 Bigram bigram = map.get(first);
-                bigram.put(second, third);
+                bigram.put(third, second);
                 checkForPopular(first, second, third);
             } else {
                 Bigram bigram = new Bigram();
@@ -41,9 +51,10 @@ public class Trigram implements NGram {
                 if (popularTokens.size() < 10) {
                     popularTokens.add(new WordTriple(first, second, third));
                 }
-                bigram.put(second, third);
+                bigram.put(third, second);
             }
         }
+        laplaceSmooth();
     }
 
     /**
@@ -56,20 +67,42 @@ public class Trigram implements NGram {
     public String generateSentence() {
         String sentence = "<s>";
         String first = "<s>";
-        String second = first;
-        String third = "";
         Random random = new Random();
+        Bigram startBigram = map.get(first);
+        int y = random.nextInt(startBigram.tokens.size() - 1);
+        Bigram.WordDouble wordDouble = startBigram.tokens.get(y);
+        String second = wordDouble.first;
+        String third = wordDouble.second;
+        sentence += " " + second + " " + third;
+        System.out.println(sentence);
+
         while (!third.equals("</s>")) {
-            Bigram firstGram = map.get(first);
-            Unigram secondGram = firstGram.map.get(second);
+            Bigram bigram = map.get(first);
+            Unigram unigram = bigram.map.get(second);
             first = second;
             second = third;
-            int x = random.nextInt(secondGram.tokens.size() - 1);
-            third = secondGram.tokens.get(x);
-            while (map.get(first).map.get(second).tokens == null) {
-                x = random.nextInt(secondGram.tokens.size() - 1);
-                third = secondGram.tokens.get(x);
+            System.out.println(unigram);
+            int x;
+            if (unigram.tokens.size() < 2) {
+                x = 0;
+            } else {
+                x = random.nextInt(unigram.tokens.size() - 1);
             }
+            third = unigram.tokens.get(x);
+
+            Bigram testBigram = map.get(second);
+            Unigram testUnigram = testBigram.map.get(third);
+            while (testUnigram == null) {
+                if (unigram.tokens.size() < 2) {
+                    x = 0;
+                } else {
+                    x = random.nextInt(unigram.tokens.size() - 1);
+                }
+                third = unigram.tokens.get(x);
+                testBigram = map.get(second);
+                testUnigram = testBigram.map.get(third);
+            }
+
             sentence += " " + third;
             System.out.println(sentence);
         }
@@ -83,7 +116,6 @@ public class Trigram implements NGram {
             String third = entry.getKey();
             for (Map.Entry<String, Unigram> ent : entry.getValue().map.entrySet()) {
                 String second = ent.getKey();
-                Iterator<Map.Entry<String, Integer>> uniIt = ent.getValue().map.entrySet().iterator();
                 for (Map.Entry<String, Integer> entry1 : ent.getValue().map.entrySet()) {
                     String first = entry1.getKey();
                     ret += third + ":" + second + ":" + first + ":" + entry1.getValue() + "\n";
@@ -128,6 +160,11 @@ public class Trigram implements NGram {
         }
     }
 
+    private void laplaceSmooth() {
+        SmoothingThread thread = new SmoothingThread(this);
+        new Thread(thread).start();
+    }
+
     private boolean contains(String first, String second, String third) {
         for (WordTriple w : popularTokens) {
             if (w.first.equals(first) && w.second.equals(second) && w.third.equals(third)) {
@@ -153,15 +190,45 @@ public class Trigram implements NGram {
         }
 
         public int getCount() {
-            if (!map.get(first).map.get(second).map.containsKey(third)) {
-                System.out.println("third null");
-            }
             return map.get(first).map.get(second).map.get(third);
         }
 
         @Override
         public String toString() {
             return "(" + third + " | " + first + " " + second + ")";
+        }
+    }
+
+    private class SmoothingThread implements Runnable {
+
+        Trigram trigram;
+
+        public SmoothingThread(Trigram trigram) {
+            this.trigram = trigram;
+        }
+
+        @Override
+        public void run() {
+            System.out.println("Smoothing with " + trigram.types.size() + " types");
+            for (String bigramString : trigram.types) {
+                if (!trigram.map.containsKey(bigramString)) {
+                    trigram.map.put(bigramString, new Bigram());
+                }
+                for (String unigramString : trigram.types) {
+                    if (!trigram.map.get(bigramString).map.containsKey(unigramString)) {
+                        trigram.map.get(bigramString).map.put(unigramString, new Unigram());
+                    }
+                    for (String integerString : trigram.types) {
+                        if (!trigram.map.get(bigramString).map.get(unigramString).map.containsKey(integerString)) {
+                            trigram.map.get(bigramString).map.get(unigramString).map.put(integerString, 1);
+                        } else {
+                            int x = trigram.map.get(bigramString).map.get(unigramString).map.get(integerString);
+                            trigram.map.get(bigramString).map.get(unigramString).map.put(integerString, x + 1);
+                        }
+                    }
+                }
+            }
+            System.out.println("Trigram smoothing complete");
         }
     }
 }
