@@ -6,10 +6,9 @@ import java.util.Random;
 /**
  * Class to model a trigram of a language model
  *
- *
  * Created by Ian on 2/21/2015.
  */
-public class Trigram implements NGram {
+public class Trigram {
 
     HashMap<String, Bigram> map = new HashMap<String, Bigram>();
     ArrayList<WordTriple> popularTokens = new ArrayList<WordTriple>();
@@ -29,7 +28,6 @@ public class Trigram implements NGram {
      *
      * @param tokens List of words to make map from
      */
-    @Override
     public void makeMap(ArrayList<String> tokens) {
 
         String first;
@@ -68,48 +66,49 @@ public class Trigram implements NGram {
      *
      * @return a randomly generated string that models a sentence
      */
-    @Override
-    public String generateSentence() {
+    public String generateSentence(Bigram helper, Unigram helper1) {
         String sentence = "<s>";
-        String first = "<s>";
+        String second = "<s>";
+        String third = second;
         Random random = new Random();
-        Bigram startBigram = map.get(first);
-        int y = random.nextInt(startBigram.tokens.size() - 1);
-        Bigram.WordDouble wordDouble = startBigram.tokens.get(y);
-        String second = wordDouble.first;
-        String third = wordDouble.second;
-        sentence += " " + second + " " + third;
-        System.out.println(sentence);
 
         while (!third.equals("</s>")) {
-            Bigram bigram = map.get(first);
-            Unigram unigram = bigram.map.get(second);
-            first = second;
-            second = third;
-            System.out.println(unigram);
-            int x;
-            if (unigram.tokens.size() < 2) {
-                x = 0;
+            if (map.containsKey(second) && map.get(second).map.containsKey(third)) {
+                Unigram gram = map.get(second).map.get(third);
+                int x = random.nextInt(gram.tokens.size() - 1);
+                second = third;
+                third = gram.tokens.get(x);
+
+            } else if (helper.map.containsKey(third)) {
+                Unigram gram = helper.map.get(third);
+                int x = random.nextInt(gram.tokens.size() - 1);
+                second = third;
+                third = gram.tokens.get(x);
             } else {
-                x = random.nextInt(unigram.tokens.size() - 1);
+                int x = random.nextInt(helper1.tokens.size() - 1);
+                second = third;
+                third = helper1.tokens.get(x);
             }
-            third = unigram.tokens.get(x);
+            while (third.equals("<s>")) {
+                if (map.containsKey(second) && map.get(second).map.containsKey(third)) {
+                    Unigram gram = map.get(second).map.get(third);
+                    int x = random.nextInt(gram.tokens.size() - 1);
+                    second = third;
+                    third = gram.tokens.get(x);
 
-            Bigram testBigram = map.get(second);
-            Unigram testUnigram = testBigram.map.get(third);
-            while (testUnigram == null) {
-                if (unigram.tokens.size() < 2) {
-                    x = 0;
+                } else if (helper.map.containsKey(third)) {
+                    Unigram gram = helper.map.get(third);
+                    int x = random.nextInt(gram.tokens.size() - 1);
+                    second = third;
+                    third = gram.tokens.get(x);
                 } else {
-                    x = random.nextInt(unigram.tokens.size() - 1);
+                    int x = random.nextInt(helper1.tokens.size() - 1);
+                    second = third;
+                    third = helper1.tokens.get(x);
                 }
-                third = unigram.tokens.get(x);
-                testBigram = map.get(second);
-                testUnigram = testBigram.map.get(third);
             }
-
             sentence += " " + third;
-            System.out.println(sentence);
+            System.out.println(third);
         }
         return sentence;
     }
@@ -130,6 +129,13 @@ public class Trigram implements NGram {
         return ret;
     }
 
+    /**
+     * Determines any change in the most popular tokens and swaps them.
+     *
+     * @param first  first word in a sequence
+     * @param second second word in a sequence
+     * @param third  third word in a sequence
+     */
     private void checkForPopular(String first, String second, String third) {
         //if the popularTokens doesn't contain this bigram
         if (!contains(first, second, third)) {
@@ -165,20 +171,14 @@ public class Trigram implements NGram {
         }
     }
 
-    public void showResults(String first, String second, String third) {
-        if (!types.contains(first)) {
-            first = Main.UNKNOWN;
-        }
-        if (!types.contains(second)) {
-            second = Main.UNKNOWN;
-        }
-        if (!types.contains(third)) {
-            second = Main.UNKNOWN;
-        }
-
-
-    }
-
+    /**
+     * Returns the unsmoothed probability of a trigram appearing in the model
+     *
+     * @param first  first word in a sequence
+     * @param second second word in a sequence
+     * @param third  third word in a sequence
+     * @return the probability of the trigram appearing in the model
+     */
     public float unsmoothedProbability(String first, String second, String third) {
         if (!types.contains(first)) {
             first = Main.UNKNOWN;
@@ -245,7 +245,9 @@ public class Trigram implements NGram {
             double x = -Math.log(laplaceSmoothProbability(first, second, third));
             total += x;
         }
-        return total * (1.0 / N);
+        double exp = total / (float) N;
+
+        return Math.pow(Math.E, exp);
     }
 
     private boolean contains(String first, String second, String third) {

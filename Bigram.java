@@ -9,7 +9,7 @@ import java.util.Random;
  * <p/>
  * Created by Ian on 2/20/2015.
  */
-public class Bigram implements NGram {
+public class Bigram {
 
     HashMap<String, Unigram> map = new HashMap<String, Unigram>();
     ArrayList<WordDouble> popularTokens = new ArrayList<WordDouble>();
@@ -18,19 +18,19 @@ public class Bigram implements NGram {
 
     int count = 0;
 
-    /**
-     * Returns a randomly generated string starting with "<s>" and ending with "</s>"
-     * Uses the probability from the bigram map to find a sentence.
-     *
-     * @return a randomly generated string that models a sentence
-     */
+
 
     public Bigram() {
         types.add(Main.UNKNOWN);
         map.put(Main.UNKNOWN, new Unigram());
     }
 
-    @Override
+    /**
+     * Returns a randomly generated string starting with "<s>" and ending with "</s>"
+     * Uses the probability from the bigram map to find a sentence.
+     *
+     * @return a randomly generated string that models a sentence
+     */
     public String generateSentence() {
         String sentence = "<s>";
         String first;
@@ -61,7 +61,6 @@ public class Bigram implements NGram {
      *
      * @param tokens List of words to make map from
      */
-    @Override
     public void makeMap(ArrayList<String> tokens) {
         String second = "<s>";
         String first;
@@ -125,17 +124,6 @@ public class Bigram implements NGram {
         }
     }
 
-    public void showResults(String first, String second) {
-        if (!types.contains(first)) {
-            first = Main.UNKNOWN;
-        }
-        if (!types.contains(second)) {
-            second = Main.UNKNOWN;
-        }
-
-
-    }
-
     public float unsmoothedProbability(String first, String second) {
         if (!types.contains(first)) {
             first = Main.UNKNOWN;
@@ -196,7 +184,9 @@ public class Bigram implements NGram {
             double x = -Math.log(laplaceSmoothProbability(first, second));
             total += x;
         }
-        return total * (1.0 / N);
+        double exp = total / (float) N;
+
+        return Math.pow(Math.E, exp);
     }
 
 

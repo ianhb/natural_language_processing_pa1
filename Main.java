@@ -4,8 +4,7 @@ import edu.stanford.nlp.pipeline.Annotation;
 import edu.stanford.nlp.pipeline.StanfordCoreNLP;
 import edu.stanford.nlp.util.CoreMap;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.Properties;
 
@@ -17,15 +16,28 @@ import java.util.Properties;
 public class Main {
 
     public static final String UNKNOWN = "<UNK>";
+    public static Properties lemmaProps = new Properties();
+    public static Properties tokenProps = new Properties();
+    public static StanfordCoreNLP lemmaPipeline;
+    public static StanfordCoreNLP tokenPipeline;
+
 
     public static void main(String[] argv) {
+        System.out.println("Setting up tokenizer");
+        tokenProps.put("annotators", "tokenize, ssplit, pos");
+        lemmaProps.put("annotators", "tokenize, ssplit, pos, lemma");
+        tokenPipeline = new StanfordCoreNLP(tokenProps, false);
+        lemmaPipeline = new StanfordCoreNLP(lemmaProps, false);
         BufferedReader buf;
         String line;
         String up_Train = "";
         String down_Train = "";
         String up_validation = "";
         String down_validation = "";
-        String updown_Test = "";
+        ArrayList<Email> upDownTest = new ArrayList<Email>();
+        ArrayList<Email> validEmails = new ArrayList<Email>();
+
+        // read validation text to string
         try {
             buf = new BufferedReader(new FileReader("training.txt"));
             System.out.println("Reading training.txt");
@@ -44,10 +56,14 @@ public class Main {
         } catch (Exception e) {
             e.printStackTrace();
         }
+
+
+        // read validation text to string
         try {
             buf = new BufferedReader(new FileReader("validation.txt"));
             System.out.println("Reading validation.txt");
             while ((line = buf.readLine()) != null) {
+                String message = "";
                 boolean downspeak = line.equals("DOWNSPEAK");
                 buf.readLine();
                 while (!(line = buf.readLine()).equals("**EOM**")) {
@@ -56,30 +72,66 @@ public class Main {
                     } else {
                         up_validation += line + " ";
                     }
+                    message += line;
                 }
+                validEmails.add(new Email(downspeak, preprocess2(message)));
             }
             buf.close();
         } catch (Exception e) {
             e.printStackTrace();
         }
 
+        // read test text to string
+        try {
+            buf = new BufferedReader(new FileReader("test.txt"));
+            System.out.println("Reading text.txt");
+            while ((line = buf.readLine()) != null) {
+                buf.readLine();
+                String message = "";
+                while (!(line = buf.readLine()).equals("**EOM**")) {
+                    message += line;
+                }
+                upDownTest.add(new Email(preprocess2(message)));
+            }
+            buf.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+
+        //process text to tokens
         System.out.println("Preprocessing up train");
-        ArrayList<String> upTrainTokens = preprocess(up_Train);
+        ArrayList<String> upTrainTokens = preprocess2(up_Train);
         System.out.println("Preprocessing down train");
-        ArrayList<String> downTrainTokens = preprocess(down_Train);
+        ArrayList<String> downTrainTokens = preprocess2(down_Train);
+        System.out.println("Preprocessing up validation");
+        ArrayList<String> upValidTokens = preprocess2(up_validation);
+        System.out.println("Preprocessing down validation");
+        ArrayList<String> downValidTokens = preprocess2(down_validation);
+
+        //Make upTraining n-grams
         Trigram upTrainTri = new Trigram();
         Bigram upTrainBi = new Bigram();
         Unigram upTrainUni = new Unigram();
         upTrainBi.makeMap(upTrainTokens);
         upTrainUni.makeMap(upTrainTokens);
         upTrainTri.makeMap(upTrainTokens);
+        LanguageModel upSpeak = new LanguageModel(upTrainUni, upTrainBi, upTrainTri);
+
+        //Make downTraining n-grams
         Trigram downTrainTri = new Trigram();
         Bigram downTrainBi = new Bigram();
         Unigram downTrainUni = new Unigram();
         downTrainBi.makeMap(downTrainTokens);
         downTrainUni.makeMap(downTrainTokens);
         downTrainTri.makeMap(downTrainTokens);
+        LanguageModel downSpeak = new LanguageModel(downTrainUni, downTrainBi, downTrainTri);
 
+
+        System.out.println();
+        System.out.println();
+
+        // print the most popular n-grams in each model
         System.out.println("Up Train Unigram Popular Tokens");
         for (String s : upTrainUni.popularTokens) {
             System.out.println(s + ":" + upTrainUni.map.get(s));
@@ -94,7 +146,7 @@ public class Main {
         }
         System.out.println("Down Train Unigram Popular Tokens");
         for (String s : downTrainUni.popularTokens) {
-            System.out.println(s + ":" + upTrainUni.map.get(s));
+            System.out.println(s + ":" + downTrainUni.map.get(s));
         }
         System.out.println("Down Train Bigram Popular Tokens");
 
@@ -106,36 +158,75 @@ public class Main {
         for (Trigram.WordTriple triple : downTrainTri.popularTokens) {
             System.out.println(triple.toString() + ":" + triple.getCount());
         }
-        //System.out.println("Unigram Sentence: " + upTrainUni.generateSentence());
-        //System.out.println("Bigram Sentence: " + upTrainBi.generateSentence());
-        //System.out.println("Trigram Sentence: " + upTrainTri.generateSentence());
-        ArrayList<String> upValidTokens = preprocess(up_validation);
-        System.out.println(upTrainUni.perplexity(downTrainTokens) < downTrainUni.perplexity(downTrainTokens));
-        System.out.println(upTrainBi.perplexity(downTrainTokens) < downTrainBi.perplexity(downTrainTokens));
-        System.out.println(upTrainTri.perplexity(downTrainTokens) < downTrainTri.perplexity(downTrainTokens));
 
-        System.out.println(upTrainUni.perplexity(upTrainTokens) > downTrainUni.perplexity(upTrainTokens));
-        System.out.println(upTrainBi.perplexity(upTrainTokens) > downTrainBi.perplexity(upTrainTokens));
-        System.out.println(upTrainTri.perplexity(upTrainTokens) > downTrainTri.perplexity(upTrainTokens));
+        System.out.println();
+        System.out.println();
 
-        System.out.println(upTrainUni.perplexity(upValidTokens) > downTrainUni.perplexity(upValidTokens));
-        System.out.println(upTrainBi.perplexity(upValidTokens) > downTrainBi.perplexity(upValidTokens));
-        System.out.println(upTrainTri.perplexity(upValidTokens) > downTrainTri.perplexity(upValidTokens));
+        // print random sentences
+        System.out.println("Random Unigram Sentence");
+        System.out.println(downTrainUni.generateSentence());
+        System.out.println(downTrainUni.generateSentence());
+        System.out.println(downTrainUni.generateSentence());
+        System.out.println(downTrainUni.generateSentence());
+        System.out.println(downTrainUni.generateSentence());
+        System.out.println("Random Bigram Sentence");
+        System.out.println(downTrainBi.generateSentence());
+        System.out.println(downTrainBi.generateSentence());
+        System.out.println(downTrainBi.generateSentence());
+        System.out.println(downTrainBi.generateSentence());
+        System.out.println(downTrainBi.generateSentence());
+        /*
+        System.out.println("Random Trigram Sentence");
+        System.out.println(upTrainTri.generateSentence(upTrainBi, upTrainUni));
+        System.out.println(upTrainTri.generateSentence(upTrainBi, upTrainUni));
+        System.out.println(upTrainTri.generateSentence(upTrainBi, upTrainUni));
+        System.out.println(upTrainTri.generateSentence(upTrainBi, upTrainUni));
+        System.out.println(upTrainTri.generateSentence(upTrainBi, upTrainUni));
+        */
+
+        System.out.println();
+        System.out.println();
+
+
+        //print the perplexity of trigrams
+        System.out.println("UPTRAIN TRIGRAM PERPLEXITY: " + upTrainTri.perplexity(upValidTokens));
+        System.out.println("DOWNTRAIN TRIGRAM PERPLEXITY: " + downTrainTri.perplexity(downValidTokens));
+
+        // print the perplexity of bigrams
+        System.out.println("UPTRAIN BIGRAM PERPLEXITY: " + upTrainBi.perplexity(upValidTokens));
+        System.out.println("DOWNTRAIN BIGRAM PERPLEXITY: " + downTrainBi.perplexity(downValidTokens));
+
+        // print the perplexity of unigrams
+        System.out.println("UPTRAIN UNIGRAM PERPLEXITY: " + upTrainUni.perplexity(upValidTokens));
+        System.out.println("DOWNTRAIN UNIGRAM PERPLEXITY: " + downTrainUni.perplexity(downValidTokens));
+
+        System.out.println();
+        System.out.println();
+
+        checkValidEmails(validEmails, downSpeak, upSpeak);
+        processTestEmails(upDownTest, downSpeak, upSpeak);
+
     }
 
+    /**
+     * Processes a string of words to an arraylist of strings representing tokens
+     * order is preserved and numbers and punctuation are filtered out
+     * ". " is interpreted as the end of a sentence and is processed as such.
+     *
+     * @param words the initial text to be tokenized
+     * @return an arraylist of strings make tokens from words
+     */
     private static ArrayList<String> preprocess(String words) {
         words = words.replaceAll("\\. ", "</s> <s>");
-        words = "<s> " + words;
-        words = words.substring(0, words.lastIndexOf("<s>"));
+        words = "<s> " + words + "</s>";
+        if (words.lastIndexOf("<s>") != 0) {
+            words = words.substring(0, words.lastIndexOf("<s>"));
+        }
         words = words.replaceAll("\\d", "");
-        words = words.replaceAll("[/,!?@()&\\-:;.$'\\\\*~]", "");
-
+        words = words.replaceAll("[,!?@()&\\-:;.$'\\\\*~]", "");
         ArrayList<String> tokens = new ArrayList<String>();
 
-        Properties props = new Properties();
-        props.put("annotators", "tokenize, ssplit, pos");
-        StanfordCoreNLP pipeline = new StanfordCoreNLP(props, false);
-        Annotation document = pipeline.process(words);
+        Annotation document = tokenPipeline.process(words);
 
         for (CoreMap sentence : document.get(CoreAnnotations.SentencesAnnotation.class)) {
             for (CoreLabel token : sentence.get(CoreAnnotations.TokensAnnotation.class)) {
@@ -146,19 +237,27 @@ public class Main {
         return tokens;
     }
 
+    /**
+     * Processes a string of words to an arraylist of strings representing tokens
+     * order is preserved and numbers and punctuation are filtered out
+     * ". " is interpreted as the end of a sentence and is processed as such.
+     * Tokens are matched to their lemma form as opposed to strict form
+     *
+     * @param words the initial text to be tokenized
+     * @return an arraylist of strings make tokens from words
+     */
     private static ArrayList<String> preprocess2(String words) {
         words = words.replaceAll("\\. ", "</s> <s>");
-        words = "<s> " + words;
-        words = words.substring(0, words.lastIndexOf("<s>"));
+        words = "<s> " + words + "</s>";
+        if (words.lastIndexOf("<s>") != 0) {
+            words = words.substring(0, words.lastIndexOf("<s>"));
+        }
         words = words.replaceAll("\\d", "");
-        words = words.replaceAll("[,!?@()&\\-:;.$'\\\\*~]", "");
+        words = words.replaceAll("[,!?@`#()&\\-:;.$'\\\\*~]", "");
 
         ArrayList<String> tokens = new ArrayList<String>();
 
-        Properties props = new Properties();
-        props.put("annotators", "tokenize, ssplit, pos, lemma");
-        StanfordCoreNLP pipeline = new StanfordCoreNLP(props, false);
-        Annotation document = pipeline.process(words);
+        Annotation document = lemmaPipeline.process(words);
 
         for (CoreMap sentence : document.get(CoreAnnotations.SentencesAnnotation.class)) {
             for (CoreLabel token : sentence.get(CoreAnnotations.TokensAnnotation.class)) {
@@ -169,15 +268,56 @@ public class Main {
         return tokens;
     }
 
-    private float goodTuring(Unigram unigram, String string) {
-        return unigram.goodTuring(string, unigram.prepgoodTuring());
+    /**
+     * Test procedure to determine the accuracy of the model
+     *
+     * @param emails an arraylist of emails from the validation set
+     * @param down   a language model made from emails to employees
+     * @param up     a language model made from emails to supervisors
+     */
+    private static void checkValidEmails(ArrayList<Email> emails, LanguageModel down, LanguageModel up) {
+        int score = 0;
+        int n = 0;
+        for (Email email : emails) {
+            n++;
+            ArrayList<String> text = email.text;
+            boolean downSpeak = (down.perplexity(text) < up.perplexity(text));
+            if (downSpeak == email.downspeak) {
+                score++;
+            }
+        }
+        System.out.println("Predicted " + score + " correctly out of " + n + " for a percentage of " + (float) score / n);
     }
 
-    private float bigramInterpolation(String first, String second, Unigram unigram, Bigram bigram) {
-        return (1 / 2) * bigram.unsmoothedProbability(first, second) + (1 / 2) * unigram.unsmoothedProbability(second);
+    /**
+     * Outputs the results of the language model's predictions for the test set
+     *
+     * @param emails an arraylist of emails from the test set
+     * @param down   a language model made from emails to employees
+     * @param up     a language model made from emails to supervisors
+     */
+    private static void processTestEmails(ArrayList<Email> emails, LanguageModel down, LanguageModel up) {
+        int n = 0;
+        try {
+            BufferedWriter bufferedWriter = new BufferedWriter(new FileWriter(new File("output.txt")));
+            bufferedWriter.write("Id,Prediction \n");
+            for (Email email : emails) {
+                n++;
+                ArrayList<String> text = email.text;
+                boolean downSpeak = (down.perplexity(text) < up.perplexity(text));
+                if (downSpeak) {
+                    bufferedWriter.write(n + "," + 0 + "\n");
+                } else {
+                    bufferedWriter.write(n + "," + 1 + "\n");
+                }
+            }
+            bufferedWriter.flush();
+            bufferedWriter.close();
+            System.out.println("Test File Classified");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
-    private float trigramInterpolation(String first, String second, String third, Unigram unigram, Bigram bigram, Trigram trigram) {
-        return (1 / 3) * trigram.unsmoothedProbability(first, second, third) + (1 / 3) * bigram.unsmoothedProbability(second, third) + (1 / 3) * unigram.unsmoothedProbability(third);
-    }
+
 }
